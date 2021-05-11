@@ -14,6 +14,8 @@
 #include "leveldb/env.h"
 #include "port/port.h"
 #include "port/thread_annotations.h"
+#include "db/memtable.h"
+
 
 namespace leveldb {
 
@@ -64,6 +66,8 @@ class DBImpl : public DB {
   // bytes.
   void RecordReadSample(Slice key);
 
+  size_t MemBufferSize();
+  void UpdateMemBufferSize();;
  private:
   friend class DB;
   struct CompactionState;
@@ -95,7 +99,7 @@ class DBImpl : public DB {
                         VersionEdit* edit, SequenceNumber* max_sequence)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-  Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base)
+  Status WriteLevel0Table(AbstractMemTable* mem, VersionEdit* edit, Version* base)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */)
@@ -139,7 +143,8 @@ class DBImpl : public DB {
   port::AtomicPointer shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
   MemTable* mem_;
-  MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted
+  AbstractMemTable* imm_ GUARDED_BY(mutex_);  // CompactConstMemTable
+  //MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted
   port::AtomicPointer has_imm_;       // So bg thread can detect non-null imm_
   WritableFile* logfile_;
   uint64_t logfile_number_ GUARDED_BY(mutex_);
@@ -191,6 +196,7 @@ class DBImpl : public DB {
   };
   CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);
 
+  size_t mem_buffer_size;
   // No copying allowed
   DBImpl(const DBImpl&);
   void operator=(const DBImpl&);

@@ -329,6 +329,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key,
   }
 }
 
+extern bool last_level;
 Status Version::Get(const ReadOptions& options,
                     const LookupKey& k,
                     std::string* value,
@@ -348,6 +349,14 @@ Status Version::Get(const ReadOptions& options,
   // in an smaller level, later levels are irrelevant.
   std::vector<FileMetaData*> tmp;
   FileMetaData* tmp2;
+  int last_level_no = 0;
+  for (int level = config::kNumLevels - 1; level >= 0; --level) {
+    size_t num_files = files_[level].size();
+    if (num_files > 0)
+      break;
+    last_level_no = level;
+  }
+
   for (int level = 0; level < config::kNumLevels; level++) {
     size_t num_files = files_[level].size();
     if (num_files == 0) continue;
@@ -399,6 +408,8 @@ Status Version::Get(const ReadOptions& options,
       FileMetaData* f = files[i];
       last_file_read = f;
       last_file_read_level = level;
+      if (last_file_read_level == last_level_no)
+        last_level = true;
 
       Saver saver;
       saver.state = kNotFound;
@@ -407,6 +418,7 @@ Status Version::Get(const ReadOptions& options,
       saver.value = value;
       s = vset_->table_cache_->Get(options, f->number, f->file_size,
                                    ikey, &saver, SaveValue);
+      last_level = false;
       if (!s.ok()) {
         return s;
       }
@@ -1142,16 +1154,12 @@ int VersionSet::NumLevelFiles(int level) const {
 
 const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {
   // Update code if kNumLevels changes
-  assert(config::kNumLevels == 7);
+  assert(config::kNumLevels == 3);
   snprintf(scratch->buffer, sizeof(scratch->buffer),
-           "files[ %d %d %d %d %d %d %d ]",
+           "files[ %d %d %d]",
            int(current_->files_[0].size()),
            int(current_->files_[1].size()),
-           int(current_->files_[2].size()),
-           int(current_->files_[3].size()),
-           int(current_->files_[4].size()),
-           int(current_->files_[5].size()),
-           int(current_->files_[6].size()));
+           int(current_->files_[2].size()));
   return scratch->buffer;
 }
 
@@ -1204,6 +1212,14 @@ int64_t VersionSet::NumLevelBytes(int level) const {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   return TotalFileSize(current_->files_[level]);
+}
+
+int64_t VersionSet::AllLevelBytes() const {
+    int64_t s = 0;
+    for (int i = 0; i < config::kNumLevels; ++i) {
+        s += NumLevelBytes(i);
+    }
+    return s;
 }
 
 int64_t VersionSet::MaxNextLevelOverlappingBytes() {
@@ -1333,13 +1349,17 @@ Compaction* VersionSet::PickCompaction() {
 
   // Files in level 0 may overlap each other, so pick up all overlapping ones
   if (level == 0) {
-    InternalKey smallest, largest;
-    GetRange(c->inputs_[0], &smallest, &largest);
+    //InternalKey smallest, largest;
+    //GetRange(c->inputs_[0], &smallest, &largest);
     // Note that the next call will discard the file we placed in
     // c->inputs_[0] earlier and replace it with an overlapping set
     // which will include the picked file.
-    current_->GetOverlappingInputs(0, &smallest, &largest, &c->inputs_[0]);
+    //current_->GetOverlappingInputs(0, &smallest, &largest, &c->inputs_[0]);
+    //c->inputs_[0].clear();
+    c->inputs_[0] = current_->files_[level];
+    //c->inputs_[0].push_back(current_->files_[level][0]);
     assert(!c->inputs_[0].empty());
+    fprintf(stderr, "Merging %lu level-0 files\n", c->inputs_[0].size());
   }
 
   SetupOtherInputs(c);

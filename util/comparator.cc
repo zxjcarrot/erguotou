@@ -69,8 +69,8 @@ class BytewiseComparatorImpl : public Comparator {
 }  // namespace
 
 const Comparator* BytewiseComparator() {
-  static NoDestructor<BytewiseComparatorImpl> singleton;
-  return singleton.get();
+  static BytewiseComparatorImpl singleton;
+  return &singleton;
 }
 
 }  // namespace leveldb

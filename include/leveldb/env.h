@@ -17,10 +17,67 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <functional>
 #include "leveldb/export.h"
 #include "leveldb/status.h"
 
 namespace leveldb {
+
+extern bool last_level;
+class Timer {
+public:
+    void Start() {
+      m_StartTime = std::chrono::system_clock::now();
+      m_bRunning = true;
+    }
+
+    void Stop() {
+      m_EndTime = std::chrono::system_clock::now();
+      m_bRunning = false;
+    }
+
+    double ElapsedMicroseconds() {
+      std::chrono::time_point<std::chrono::system_clock> endTime;
+
+      if (m_bRunning) {
+        endTime = std::chrono::system_clock::now();
+      } else {
+        endTime = m_EndTime;
+      }
+
+      return std::chrono::duration_cast<std::chrono::microseconds>(endTime - m_StartTime).count();
+    }
+
+    double ElapsedMilliseconds() {
+      return ElapsedMicroseconds() / 1000.0;
+    }
+
+    double ElapsedSeconds() {
+      return ElapsedMilliseconds() / 1000.0;
+    }
+
+private:
+    std::chrono::time_point<std::chrono::system_clock> m_StartTime;
+    std::chrono::time_point<std::chrono::system_clock> m_EndTime;
+    bool m_bRunning = false;
+};
+
+class ScopedTimer {
+public:
+
+    ScopedTimer(std::function<void(double)> func) : func(func) {
+        timer.Start();
+    }
+
+    ~ScopedTimer() {
+        timer.Stop();
+        func(timer.ElapsedMicroseconds());
+    }
+
+    Timer timer;
+    std::function<void(double)> func;
+};
 
 class FileLock;
 class Logger;

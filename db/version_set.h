@@ -204,6 +204,8 @@ class VersionSet {
   // Return the combined file size of all files at the specified level.
   int64_t NumLevelBytes(int level) const;
 
+  int64_t AllLevelBytes() const;
+
   // Return the last sequence number.
   uint64_t LastSequence() const { return last_sequence_; }
 

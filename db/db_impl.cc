@@ -144,7 +144,8 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       background_compaction_scheduled_(false),
       manual_compaction_(nullptr),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
-                               &internal_comparator_)) {
+                               &internal_comparator_)),
+      mem_buffer_size(options_.write_buffer_size){
   has_imm_.Release_Store(nullptr);
 }
 
@@ -490,7 +491,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   return status;
 }
 
-Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
+Status DBImpl::WriteLevel0Table(AbstractMemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
@@ -680,6 +681,7 @@ void DBImpl::BackgroundCall() {
   } else {
     BackgroundCompaction();
   }
+  this->UpdateMemBufferSize();
 
   background_compaction_scheduled_ = false;
 
@@ -1058,9 +1060,9 @@ struct IterState {
   port::Mutex* const mu;
   Version* const version GUARDED_BY(mu);
   MemTable* const mem GUARDED_BY(mu);
-  MemTable* const imm GUARDED_BY(mu);
+  AbstractMemTable* const imm GUARDED_BY(mu);
 
-  IterState(port::Mutex* mutex, MemTable* mem, MemTable* imm, Version* version)
+  IterState(port::Mutex* mutex, MemTable* mem, AbstractMemTable* imm, Version* version)
       : mu(mutex), version(version), mem(mem), imm(imm) { }
 };
 
@@ -1128,7 +1130,7 @@ Status DBImpl::Get(const ReadOptions& options,
   }
 
   MemTable* mem = mem_;
-  MemTable* imm = imm_;
+  AbstractMemTable* imm = imm_;
   Version* current = versions_->current();
   mem->Ref();
   if (imm != nullptr) imm->Ref();
@@ -1179,6 +1181,19 @@ void DBImpl::RecordReadSample(Slice key) {
   if (versions_->current()->RecordReadSample(key)) {
     MaybeScheduleCompaction();
   }
+}
+
+size_t DBImpl::MemBufferSize() {
+  return mem_buffer_size;
+}
+
+void DBImpl::UpdateMemBufferSize() {
+  mutex_.AssertHeld();
+  mem_buffer_size = versions_->AllLevelBytes() * 0.1;
+  if (mem_buffer_size < options_.write_buffer_size) {
+    mem_buffer_size = options_.write_buffer_size;
+  }
+  fprintf(stderr, "Mem buffer size updated to %lu bytes\n", mem_buffer_size);
 }
 
 const Snapshot* DBImpl::GetSnapshot() {
@@ -1349,7 +1364,8 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force &&
-               (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
+               //(mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
+               (mem_->ApproximateMemoryUsage() <= MemBufferSize())) {
       // There is room in current memtable
       break;
     } else if (imm_ != nullptr) {
@@ -1377,6 +1393,8 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       logfile_ = lfile;
       logfile_number_ = new_log_number;
       log_ = new log::Writer(lfile);
+      //imm_ = new CompactConstMemTable(*mem_);
+      //imm_->Ref();
       imm_ = mem_;
       has_imm_.Release_Store(imm_);
       mem_ = new MemTable(internal_comparator_);

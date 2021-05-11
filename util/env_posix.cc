@@ -36,7 +36,9 @@
 #include "util/env_posix_test_helper.h"
 
 namespace leveldb {
+bool last_level = false;
 
+std::atomic<uint64_t> time_syscalls{0};
 namespace {
 
 // Set by EnvPosixTestHelper::SetReadOnlyMMapLimit() and MaxOpenFiles().
@@ -57,6 +59,15 @@ Status PosixError(const std::string& context, int error_number) {
     return Status::IOError(context, std::strerror(error_number));
   }
 }
+
+class ScopedTimerForSyscall{
+public:
+
+    ScopedTimerForSyscall()
+      : timer([](double microseconds){ time_syscalls.fetch_add(microseconds); }) {}
+
+    ScopedTimer timer;
+};
 
 // Helper class to limit resource usage to avoid exhaustion.
 // Currently used to limit read-only file descriptors and mmap file usage
@@ -108,6 +119,7 @@ class PosixSequentialFile final : public SequentialFile {
   ~PosixSequentialFile() override { close(fd_); }
 
   Status Read(size_t n, Slice* result, char* scratch) override {
+    ScopedTimerForSyscall timer;
     Status status;
     while (true) {
       ::ssize_t read_size = ::read(fd_, scratch, n);
@@ -125,6 +137,7 @@ class PosixSequentialFile final : public SequentialFile {
   }
 
   Status Skip(uint64_t n) override {
+    ScopedTimerForSyscall timer;
     if (::lseek(fd_, n, SEEK_CUR) == static_cast<off_t>(-1)) {
       return PosixError(filename_, errno);
     }
@@ -151,6 +164,7 @@ class PosixRandomAccessFile final : public RandomAccessFile {
         fd_limiter_(fd_limiter),
         filename_(std::move(filename)) {
     if (!has_permanent_fd_) {
+      ScopedTimerForSyscall timer;
       assert(fd_ == -1);
       ::close(fd);  // The file will be opened on every read.
     }
@@ -158,6 +172,7 @@ class PosixRandomAccessFile final : public RandomAccessFile {
 
   ~PosixRandomAccessFile() override {
     if (has_permanent_fd_) {
+      ScopedTimerForSyscall timer;
       assert(fd_ != -1);
       ::close(fd_);
       fd_limiter_->Release();
@@ -166,6 +181,7 @@ class PosixRandomAccessFile final : public RandomAccessFile {
 
   Status Read(uint64_t offset, size_t n, Slice* result,
               char* scratch) const override {
+    ScopedTimerForSyscall timer;
     int fd = fd_;
     if (!has_permanent_fd_) {
       fd = ::open(filename_.c_str(), O_RDONLY);

@@ -74,7 +74,7 @@ static int FLAGS_value_size = 100;
 
 // Arrange to generate values that shrink to this fraction of
 // their original size after compression
-static double FLAGS_compression_ratio = 0.5;
+static double FLAGS_compression_ratio = 1;
 
 // Print histogram of operation timings
 static bool FLAGS_histogram = false;
@@ -115,6 +115,7 @@ static const char* FLAGS_db = nullptr;
 
 namespace leveldb {
 
+extern std::atomic<uint64_t> time_syscalls;
 namespace {
 leveldb::Env* g_env = nullptr;
 
@@ -714,6 +715,7 @@ class Benchmark {
     options.max_open_files = FLAGS_open_files;
     options.filter_policy = filter_policy_;
     options.reuse_logs = FLAGS_reuse_logs;
+    fprintf(stderr, "dbname: %s\n", FLAGS_db);
     Status s = DB::Open(options, FLAGS_db, &db_);
     if (!s.ok()) {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());
@@ -794,21 +796,26 @@ class Benchmark {
   }
 
   void ReadRandom(ThreadState* thread) {
-    ReadOptions options;
-    std::string value;
-    int found = 0;
-    for (int i = 0; i < reads_; i++) {
-      char key[100];
-      const int k = thread->rand.Next() % FLAGS_num;
-      snprintf(key, sizeof(key), "%016d", k);
-      if (db_->Get(options, key, &value).ok()) {
-        found++;
+    double total_benchmark_time_microseconds = 0;
+    {
+      ScopedTimer timer([&](double v){ total_benchmark_time_microseconds +=v; });
+      ReadOptions options;
+      std::string value;
+      int found = 0;
+      for (int i = 0; i < reads_; i++) {
+        char key[100];
+        const int k = thread->rand.Next() % FLAGS_num;
+        snprintf(key, sizeof(key), "%016d", k);
+        if (db_->Get(options, key, &value).ok()) {
+          found++;
+        }
+        thread->stats.FinishedSingleOp();
       }
-      thread->stats.FinishedSingleOp();
+      char msg[100];
+      snprintf(msg, sizeof(msg), "(%d of %d found)", found, num_);
+      thread->stats.AddMessage(msg);
     }
-    char msg[100];
-    snprintf(msg, sizeof(msg), "(%d of %d found)", found, num_);
-    thread->stats.AddMessage(msg);
+    fprintf(stderr, "total time %.0lfus, pread time %lluus\n", total_benchmark_time_microseconds, time_syscalls.load());
   }
 
   void ReadMissing(ThreadState* thread) {
@@ -1005,8 +1012,8 @@ int main(int argc, char** argv) {
 
   // Choose a location for the test database if none given with --db=<path>
   if (FLAGS_db == nullptr) {
-      leveldb::g_env->GetTestDirectory(&default_db_path);
-      default_db_path += "/dbbench";
+      //leveldb::g_env->GetTestDirectory(&default_db_path);
+      default_db_path += "/mnt/toshiba/erguotou/";
       FLAGS_db = default_db_path.c_str();
   }
 
