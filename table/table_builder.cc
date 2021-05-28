@@ -135,6 +135,8 @@ void TableBuilder::Flush() {
     r->filter_block->StartBlock(r->offset);
   }
 }
+extern std::atomic<uint64_t> cnt_compression;
+extern std::atomic<uint64_t> time_compression;
 
 void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   // File format contains a sequence of blocks where each block has:
@@ -154,6 +156,10 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       break;
 
     case kSnappyCompression: {
+      ScopedTimer timer([&](double v){
+          time_compression += v;
+          cnt_compression += 1;
+      });
       std::string* compressed = &r->compressed_output;
       if (port::Snappy_Compress(raw.data(), raw.size(), compressed) &&
           compressed->size() < raw.size() - (raw.size() / 8u)) {

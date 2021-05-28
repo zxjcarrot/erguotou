@@ -39,6 +39,10 @@ namespace leveldb {
 bool last_level = false;
 
 std::atomic<uint64_t> time_syscalls{0};
+std::atomic<uint64_t> cnt_compression{0};
+std::atomic<uint64_t> cnt_decompression{0};
+std::atomic<uint64_t> time_compression{0};
+std::atomic<uint64_t> time_decompression{0};
 namespace {
 
 // Set by EnvPosixTestHelper::SetReadOnlyMMapLimit() and MaxOpenFiles().

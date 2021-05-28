@@ -74,7 +74,7 @@ static int FLAGS_value_size = 100;
 
 // Arrange to generate values that shrink to this fraction of
 // their original size after compression
-static double FLAGS_compression_ratio = 1;
+static double FLAGS_compression_ratio = 0.5;
 
 // Print histogram of operation timings
 static bool FLAGS_histogram = false;
@@ -1019,5 +1019,10 @@ int main(int argc, char** argv) {
 
   leveldb::Benchmark benchmark;
   benchmark.Run();
+  using namespace leveldb;
+  fprintf(stderr, "compression time %lu, compression cnt %lu\n", leveldb::time_compression.load(), leveldb::cnt_compression.load());
+  fprintf(stderr, "decompression time %lu, decompression cnt %lu\n", leveldb::time_decompression.load(), leveldb::cnt_decompression.load());
+  fprintf(stderr, "compression latency %f/block\n", leveldb::time_compression.load() / (leveldb::cnt_compression.load() + 1.0));
+  fprintf(stderr, "decompression latency %f/block\n", leveldb::time_decompression.load() / (leveldb::cnt_decompression.load() + 1.0));
   return 0;
 }

@@ -19,11 +19,17 @@
 #include <vector>
 #include <chrono>
 #include <functional>
+#include <atomic>
 #include "leveldb/export.h"
 #include "leveldb/status.h"
 
 namespace leveldb {
 
+extern std::atomic<uint64_t> time_syscalls;
+extern std::atomic<uint64_t> cnt_compression;
+extern std::atomic<uint64_t> cnt_decompression;
+extern std::atomic<uint64_t> time_compression;
+extern std::atomic<uint64_t> time_decompression;
 extern bool last_level;
 class Timer {
 public:

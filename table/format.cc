@@ -61,6 +61,8 @@ Status Footer::DecodeFrom(Slice* input) {
   }
   return result;
 }
+extern std::atomic<uint64_t> time_decompression;
+extern std::atomic<uint64_t> cnt_decompression;
 
 Status ReadBlock(RandomAccessFile* file,
                  const ReadOptions& options,
@@ -116,6 +118,10 @@ Status ReadBlock(RandomAccessFile* file,
       // Ok
       break;
     case kSnappyCompression: {
+      ScopedTimer timer([&](double v){
+        time_decompression += v;
+        cnt_decompression += 1;
+      });
       size_t ulength = 0;
       if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
         delete[] buf;
