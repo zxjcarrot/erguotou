@@ -107,6 +107,7 @@ target_sources(leveldb
     "${PROJECT_SOURCE_DIR}/db/log_reader.h"
     "${PROJECT_SOURCE_DIR}/db/log_writer.cc"
     "${PROJECT_SOURCE_DIR}/db/log_writer.h"
+    "${PROJECT_SOURCE_DIR}/db/block_cache.cc"
     "${PROJECT_SOURCE_DIR}/db/memtable.cc"
     "${PROJECT_SOURCE_DIR}/db/memtable.h"
     "${PROJECT_SOURCE_DIR}/db/repair.cc"
