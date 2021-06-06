@@ -480,7 +480,7 @@ class DBTest {
   }
 
   // Prevent pushing of new sstables into deeper levels by adding
-  // tables that cover a specified range to all levels.
+  // tables_ that cover a specified range to all levels.
   void FillLevels(const std::string& smallest, const std::string& largest) {
     MakeTables(config::kNumLevels, smallest, largest);
   }

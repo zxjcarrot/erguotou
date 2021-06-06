@@ -19,13 +19,13 @@ A copy of the current log file is kept in an in-memory structure (the
 `memtable`). This copy is consulted on every read so that read operations
 reflect all logged updates.
 
-## Sorted tables
+## Sorted tables_
 
 A sorted table (*.ldb) stores a sequence of entries sorted by key. Each entry is
 either a value for the key, or a deletion marker for the key. (Deletion markers
-are kept around to hide obsolete values present in older sorted tables).
+are kept around to hide obsolete values present in older sorted tables_).
 
-The set of sorted tables are organized into a sequence of levels. The sorted
+The set of sorted tables_ are organized into a sequence of levels. The sorted
 table generated from a log file is placed in a special **young** level (also
 called level-0). When the number of young files exceeds a certain threshold
 (currently four), all of the young files are merged together with all of the
@@ -43,7 +43,7 @@ from the young level to the largest level using only bulk reads and writes
 
 ### Manifest
 
-A MANIFEST file lists the set of sorted tables that make up each level, the
+A MANIFEST file lists the set of sorted tables_ that make up each level, the
 corresponding key ranges, and other important metadata. A new MANIFEST file
 (with a new number embedded in the file name) is created whenever the database
 is reopened. The MANIFEST file is formatted as a log, and changes made to the

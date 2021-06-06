@@ -5,6 +5,7 @@
 #include "db/memtable.h"
 #include "db/dbformat.h"
 #include "leveldb/comparator.h"
+#include "table/merger.h"
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
 #include "util/coding.h"
@@ -243,5 +244,60 @@ bool CompactConstMemTable::Get(const LookupKey& key, std::string* value, Status*
   return false;
 }
 
+
+Iterator* MemTableGroup::NewIterator() {
+  std::vector<Iterator *> list;
+  for (size_t i = 0; i < tables_.size(); ++i) {
+    list.push_back(tables_[i]->NewIterator());
+  }
+  return NewMergingIterator(&internal_comparator_, &list[0], list.size());
+}
+
+void MemTableGroup::Ref() {
+  ++refs_;
+}
+
+void MemTableGroup::Unref() {
+  --refs_;
+  assert(refs_ >= 0);
+  if (refs_ <= 0) {
+    for (size_t i = 0; i < tables_.size(); ++i) {
+      tables_[i]->Unref();
+    }
+    delete this;
+  }
+}
+
+size_t MemTableGroup::ApproximateMemoryUsage() {
+  size_t usage = 0;
+  for (size_t i = 0; i < tables_.size(); ++i) {
+    usage += tables_[i]->ApproximateMemoryUsage();
+  }
+  return usage;
+}
+
+bool MemTableGroup::Get(const LookupKey& key, std::string* value, Status* s) {
+  for (size_t i = (int)tables_.size() - 1; i >= 0; --i) {
+    auto imm = tables_[i];
+    if (imm->Get(key, value, s)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool MemTableGroup::GetField(const LookupKey& key, int ith, std::string *value, Status *s) {
+  for (size_t i = (int)tables_.size() - 1; i >= 0; --i) {
+    auto imm = tables_[i];
+    if (imm->GetField(key, ith, value, s)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void MemTableGroup::AddMemTable(AbstractMemTable* memtable) {
+  tables_.push_back(memtable);
+}
 
 }  // namespace leveldb

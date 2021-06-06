@@ -35,6 +35,28 @@ public:
     }
 };
 
+class MemTableGroup: public AbstractMemTable {
+    // Return an iterator that yields the contents of the memtable.
+    //
+    // The caller must ensure that the underlying MemTable remains live
+    // while the returned iterator is live.  The keys returned by this
+    // iterator are internal keys encoded by AppendInternalKey in the
+    // db/format.{h,cc} module.
+    virtual Iterator* NewIterator() override;
+    virtual void Ref() override;
+    virtual void Unref() override;
+    virtual size_t ApproximateMemoryUsage() override;
+    virtual bool Get(const LookupKey& key, std::string* value, Status* s) override;
+    virtual bool GetField(const LookupKey& key, int ith, std::string *value, Status *s) override;
+    void AddMemTable(AbstractMemTable* memtable);
+
+    MemTableGroup(const InternalKeyComparator & comparator): internal_comparator_(comparator) {}
+private:
+    std::vector<AbstractMemTable*> tables_;
+    InternalKeyComparator internal_comparator_;
+    int refs_;
+};
+
 class MemTable : public AbstractMemTable {
  public:
   // MemTables are reference counted.  The initial reference count
