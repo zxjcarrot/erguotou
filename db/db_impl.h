@@ -67,7 +67,8 @@ class DBImpl : public DB {
   void RecordReadSample(Slice key);
 
   size_t MemBufferSize();
-  void UpdateMemBufferSize();;
+  size_t TopMemBufferSize();
+  void UpdateMemBufferSize();
  private:
   friend class DB;
   struct CompactionState;
@@ -143,7 +144,7 @@ class DBImpl : public DB {
   port::AtomicPointer shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
   MemTable* mem_;
-  AbstractMemTable* imm_ GUARDED_BY(mutex_);  // CompressedMemTable
+  MemTableGroup * imm_ GUARDED_BY(mutex_);  // CompressedMemTable
   //MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted
   port::AtomicPointer has_imm_;       // So bg thread can detect non-null imm_
   WritableFile* logfile_;

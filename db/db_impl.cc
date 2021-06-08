@@ -657,7 +657,7 @@ void DBImpl::MaybeScheduleCompaction() {
     // DB is being deleted; no more background compactions
   } else if (!bg_error_.ok()) {
     // Already got an error; no more changes
-  } else if (imm_ == nullptr &&
+  } else if ((imm_ == nullptr || imm_->ApproximateMemoryUsage() <= MemBufferSize()) &&
              manual_compaction_ == nullptr &&
              !versions_->NeedsCompaction()) {
     // No work to be done
@@ -694,7 +694,7 @@ void DBImpl::BackgroundCall() {
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
-  if (imm_ != nullptr) {
+  if (imm_ != nullptr && imm_->ApproximateMemoryUsage() >= MemBufferSize()) {
     CompactMemTable();
     return;
   }
@@ -926,7 +926,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     if (has_imm_.NoBarrier_Load() != nullptr) {
       const uint64_t imm_start = env_->NowMicros();
       mutex_.Lock();
-      if (imm_ != nullptr) {
+      if (imm_ != nullptr && imm_->ApproximateMemoryUsage() >= MemBufferSize()) {
         CompactMemTable();
         // Wake up MakeRoomForWrite() if necessary.
         background_work_finished_signal_.SignalAll();
@@ -1183,6 +1183,10 @@ void DBImpl::RecordReadSample(Slice key) {
   }
 }
 
+size_t DBImpl::TopMemBufferSize() {
+  return std::max((size_t)1024ULL*1024, mem_buffer_size / 10);
+}
+
 size_t DBImpl::MemBufferSize() {
   return mem_buffer_size;
 }
@@ -1193,7 +1197,7 @@ void DBImpl::UpdateMemBufferSize() {
   if (mem_buffer_size < options_.write_buffer_size) {
     mem_buffer_size = options_.write_buffer_size;
   }
-  fprintf(stderr, "Mem buffer size updated to %lu bytes\n", mem_buffer_size);
+  fprintf(stderr, "Mem buffer size updated to %lu bytes, top buffer size updated to %lu bytes\n", mem_buffer_size, TopMemBufferSize());
 }
 
 const Snapshot* DBImpl::GetSnapshot() {
@@ -1365,42 +1369,48 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       mutex_.Lock();
     } else if (!force &&
                //(mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
-               (mem_->ApproximateMemoryUsage() <= MemBufferSize())) {
+               (mem_->ApproximateMemoryUsage() <= TopMemBufferSize())) {
       // There is room in current memtable
       break;
-    } else if (imm_ != nullptr) {
-      // We have filled up the current memtable, but the previous
-      // one is still being compacted, so we wait.
-      Log(options_.info_log, "Current memtable full; waiting...\n");
-      background_work_finished_signal_.Wait();
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
       Log(options_.info_log, "Too many L0 files; waiting...\n");
       background_work_finished_signal_.Wait();
     } else {
-      // Attempt to switch to a new memtable and trigger compaction of old
-      assert(versions_->PrevLogNumber() == 0);
-      uint64_t new_log_number = versions_->NewFileNumber();
-      WritableFile* lfile = nullptr;
-      s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
-      if (!s.ok()) {
-        // Avoid chewing through file number space in a tight loop.
-        versions_->ReuseFileNumber(new_log_number);
-        break;
+      if (imm_ == nullptr) {
+        imm_ = new MemTableGroup(internal_comparator_);
+        imm_->Ref();
+        has_imm_.Release_Store(imm_);
+      } else {
+        if (imm_->ApproximateMemoryUsage() >= MemBufferSize()) {
+          // Already doing compaction.
+          Log(options_.info_log, "Current memtable full; waiting...\n");
+          background_work_finished_signal_.Wait();
+          continue;
+        }
       }
-      delete log_;
-      delete logfile_;
-      logfile_ = lfile;
-      logfile_number_ = new_log_number;
-      log_ = new log::Writer(lfile);
-      //imm_ = new CompactConstMemTable(*mem_);
-      //imm_->Ref();
-      imm_ = mem_;
-      has_imm_.Release_Store(imm_);
+
+      imm_->AddMemTable(mem_);
       mem_ = new MemTable(internal_comparator_);
+      fprintf(stderr, "# immutable tables : %lu\n", imm_->NumTables());
       mem_->Ref();
-      force = false;   // Do not force another compaction if have room
-      MaybeScheduleCompaction();
+      if (imm_->ApproximateMemoryUsage() >= MemBufferSize()) {
+        uint64_t new_log_number = versions_->NewFileNumber();
+        WritableFile* lfile = nullptr;
+        s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
+        if (!s.ok()) {
+          // Avoid chewing through file number space in a tight loop.
+          versions_->ReuseFileNumber(new_log_number);
+          break;
+        }
+        delete log_;
+        delete logfile_;
+        logfile_ = lfile;
+        logfile_number_ = new_log_number;
+        log_ = new log::Writer(lfile);
+        force = false;   // Do not force another compaction if have room
+        MaybeScheduleCompaction();
+      }
     }
   }
   return s;

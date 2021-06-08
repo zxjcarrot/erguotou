@@ -36,6 +36,7 @@ public:
 };
 
 class MemTableGroup: public AbstractMemTable {
+public:
     // Return an iterator that yields the contents of the memtable.
     //
     // The caller must ensure that the underlying MemTable remains live
@@ -49,7 +50,7 @@ class MemTableGroup: public AbstractMemTable {
     virtual bool Get(const LookupKey& key, std::string* value, Status* s) override;
     virtual bool GetField(const LookupKey& key, int ith, std::string *value, Status *s) override;
     void AddMemTable(AbstractMemTable* memtable);
-
+    size_t NumTables() const { return tables_.size(); };
     MemTableGroup(const InternalKeyComparator & comparator): internal_comparator_(comparator) {}
 private:
     std::vector<AbstractMemTable*> tables_;

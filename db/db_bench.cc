@@ -74,7 +74,7 @@ static int FLAGS_value_size = 100;
 
 // Arrange to generate values that shrink to this fraction of
 // their original size after compression
-static double FLAGS_compression_ratio = 0.5;
+static double FLAGS_compression_ratio = 1;
 
 // Print histogram of operation timings
 static bool FLAGS_histogram = false;

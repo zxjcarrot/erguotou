@@ -277,7 +277,7 @@ size_t MemTableGroup::ApproximateMemoryUsage() {
 }
 
 bool MemTableGroup::Get(const LookupKey& key, std::string* value, Status* s) {
-  for (size_t i = (int)tables_.size() - 1; i >= 0; --i) {
+  for (int i = (int)tables_.size() - 1; i >= 0; --i) {
     auto imm = tables_[i];
     if (imm->Get(key, value, s)) {
       return true;
